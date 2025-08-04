@@ -23,7 +23,8 @@
 #   pip install requests rich
 #
 # Usage:
-#   ./git-haul.py [--org <github-org>] [<github-org>:]<github-user>@<github-host-ssh-alias> <local-root-path>
+#   ./git-haul.py [--org <github-org>] [--github-pat <token>] \
+#       [<github-org>:]<github-user>@<github-host-ssh-alias> <local-root-path>
 #
 # Status key:
 #   NOT PRESENT   - No local clone
@@ -106,7 +107,7 @@ def check_local_path(path: str) -> pathlib.Path:
         fatal(f"Local path '{p}' is not writable")
     return p
 
-def github_api_request(url: str, params=None, token=None):
+def github_api_request(url: str, params=None, token: Optional[str] = None):
     """Perform a GitHub API GET, die on failure."""
     headers = {}
     if token:
@@ -119,7 +120,7 @@ def github_api_request(url: str, params=None, token=None):
         fatal(f"GitHub API request failed: {resp.status_code} {resp.reason}\nURL: {url}\n{resp.text}")
     return resp.json()
 
-def get_github_repos(user: str, org: Optional[str]) -> List[Dict]:
+def get_github_repos(user: str, org: Optional[str], token: Optional[str]) -> List[Dict]:
     """Return list of repo metadata for a GitHub user or organization."""
     repos = []
     page = 1
@@ -128,7 +129,7 @@ def get_github_repos(user: str, org: Optional[str]) -> List[Dict]:
         while True:
             url = f"https://api.github.com/orgs/{org}/repos"
             params = {'per_page': 100, 'page': page, 'type': 'all', 'sort': 'full_name'}
-            chunk = github_api_request(url, params=params)
+            chunk = github_api_request(url, params=params, token=token)
             if not chunk:
                 break
             repos.extend(chunk)
@@ -140,7 +141,7 @@ def get_github_repos(user: str, org: Optional[str]) -> List[Dict]:
         while True:
             url = f"https://api.github.com/users/{user}/repos"
             params = {'per_page': 100, 'page': page, 'type': 'owner', 'sort': 'full_name'}
-            chunk = github_api_request(url, params=params)
+            chunk = github_api_request(url, params=params, token=token)
             if not chunk:
                 break
             repos.extend(chunk)
@@ -215,8 +216,16 @@ def check_repos(user: str, alias: str, org: Optional[str], repos: List[Dict], ro
         remote_url = f"git@{alias}:{owner}/{repo_name}.git"
         repo_path = root_path / repo_name
         status, branch, has_submodules = local_repo_status(repo_path, remote_url)
+        vis = repo.get('visibility')
+        if vis == 'internal':
+            visibility = 'RESTRICTED'
+        elif repo.get('private') or vis == 'private':
+            visibility = 'PRIVATE'
+        else:
+            visibility = 'PUBLIC'
         checked.append({
             'name': repo_name,
+            'visibility': visibility,
             'status': status,
             'branch': branch,
             'path': repo_path,
@@ -241,6 +250,7 @@ def display_repos_table(checked: List[Dict], title="GitHub Repository Status"):
     """Print formatted, colorized table."""
     table = Table(title=title, box=box.SIMPLE_HEAVY)
     table.add_column("Repository", style="bold")
+    table.add_column("VISIBILITY", style="")
     table.add_column("Branch", style="")
     table.add_column("Status", style="bold")
     table.add_column("Submodules", style="")
@@ -250,7 +260,13 @@ def display_repos_table(checked: List[Dict], title="GitHub Repository Status"):
             submodules = "[green]Yes[/green]"
         else:
             submodules = "[grey50](none)[/grey50]"
-        table.add_row(item['name'], item['branch'], f"[{color}]{item['status']}[/{color}]", submodules)
+        table.add_row(
+            item['name'],
+            item['visibility'],
+            item['branch'],
+            f"[{color}]{item['status']}[/{color}]",
+            submodules,
+        )
     console.print(table)
 
 def get_grouped_repos(checked: List[Dict]) -> Dict[str, List[Dict]]:
@@ -383,6 +399,7 @@ def main():
         epilog="See README.TXT for full documentation."
     )
     parser.add_argument("--org", help="GitHub organization to enumerate repos for")
+    parser.add_argument("--github-pat", help="GitHub Personal Access Token (insecure)")
     parser.add_argument("target", nargs="?", help="[<org>:]<github-user>@<github-host-ssh-alias>")
     parser.add_argument("local_root", nargs="?", help="Path to local root directory for repositories")
     args = parser.parse_args()
@@ -397,6 +414,13 @@ def main():
     org1, user, alias = parse_org_user_alias(args.target)
     org2 = args.org
 
+    pat_env = os.environ.get("GITHAUL_GITHIB_PAT")
+    token = args.github_pat if args.github_pat else pat_env
+    if args.github_pat:
+        console.print(
+            "[yellow]Security warning: Providing a PAT on the command line may expose it to other users. Consider using GITHAUL_GITHIB_PAT instead.[/yellow]"
+        )
+
     # Validate org logic
     if org1 and org2 and org1 != org2:
         fatal(f"Organization mismatch: '{org1}' (from target) != '{org2}' (from --org). Use only one, or ensure they match.")
@@ -410,7 +434,7 @@ def main():
     else:
         console.print(f"[bold cyan]Listing repositories for user [white]{user}[/white], authenticating via SSH alias [white]{alias}[/white][/bold cyan]")
 
-    repos = get_github_repos(user, org)
+    repos = get_github_repos(user, org, token)
     if not repos:
         fatal("No repositories found for this user or organization.")
     checked = check_repos(user, alias, org, repos, root_path)

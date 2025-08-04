@@ -1,0 +1,20 @@
+Git-haul Security Guidance
+==========================
+
+Git-haul retrieves repository information from GitHub. When accessing private or
+restricted repositories, you must authenticate with a Personal Access Token
+(PAT) that has appropriate scopes for repository access.
+
+Supplying a PAT on the command line (`--github-pat=<token>`) exposes it to
+process listings. The recommended approach is to set the environment variable
+`GITHAUL_GITHIB_PAT` before running the tool. Git-haul will automatically use the
+value from the environment if present.
+
+Keep your PAT secure:
+
+- Store it in a protected environment variable or credential store.
+- Use the least privileges necessary.
+- Rotate or revoke the token if it ever becomes exposed.
+
+Org-level materials such as SSH certificates or tokens should be handled in
+accordance with your organization's security policies.
