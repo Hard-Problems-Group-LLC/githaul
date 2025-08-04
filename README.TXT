@@ -31,6 +31,7 @@ Features
     - CONFLICT       (red)      - Merge conflict
     - DESYNCHRONIZED (red)      - Dirty & behind remote
     - Submodules: "Yes" (green) or "(none)" (gray) for each repo.
+    - Visibility column shows PUBLIC, PRIVATE, or RESTRICTED for each repo.
 - Groups repositories by status for prompts and action.
 - Prompts once per group:
     - Update all out-of-date/obsolete repositories? (fetch, then pull if clean)
@@ -49,7 +50,12 @@ Requirements
 
 Usage
 -----
-    ./git-haul.py [--org <github-org>] [<github-org>:]<github-user>@<github-host-ssh-alias> <local-root-path>
+    ./git-haul.py [--org <github-org>] [--github-pat <token>] \
+        [<github-org>:]<github-user>@<github-host-ssh-alias> <local-root-path>
+
+Set the environment variable `GITHAUL_GITHIB_PAT` to supply a Personal Access
+Token without exposing it on the command line. Using `--github-pat` is allowed
+but will trigger a security warning at runtime.
 
 Examples:
     ./git-haul.py jdobbs@github-yoyodyne ~/src/yoyodyne
@@ -66,6 +72,7 @@ Examples:
 
   - If you only use a single GitHub account and SSH key, you can use 'github.com' as the alias.
   - The local-root-path is the directory where all repositories will be checked for and managed. Each repo is expected as a subdirectory directly beneath this path, named after the repo.
+  - To work with private or restricted repositories, set the `GITHAUL_GITHIB_PAT` environment variable with a valid Personal Access Token. See `docs/SECURITY.TXT` for guidance.
 
 Prompts & Actions
 -----------------
@@ -78,7 +85,7 @@ Prompts & Actions
 
 Safety & Limitations
 --------------------
-- Only repositories you can access are shown (public or private as allowed by your credentials).
+- Only repositories you can access are shown (public, private, or restricted if your token allows).
 - No repo is ever reset, merged, or committed to by this script.
 - All local changes, stashes, and untracked files are **left untouched**.
 - Post-action summary shows updated repo status in a new colorized table.
@@ -96,4 +103,6 @@ Author
 License
 -------
 MIT, no warranty.
+
+See `docs/SECURITY.TXT` for information on securing your GitHub credentials.
 
